@@ -77,12 +77,12 @@ jobs:
       - name: 设置 Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: 'npm'
           cache-dependency-path: admin/package-lock.json
 
       - name: 安装依赖
-        run: npm install
+        run: npm ci
 
       - name: 类型检查
         id: typecheck
@@ -127,10 +127,12 @@ jobs:
       - name: 设置 Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: blog/package-lock.json
 
       - name: 安装依赖
-        run: npm install
+        run: npm ci
 
       - name: 类型检查
         id: typecheck

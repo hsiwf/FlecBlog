@@ -10,7 +10,6 @@ docker.env
 node_modules/
 miniprogram_npm/
 vendor/
-blog/package-lock.json
 
 # 构建产物
 dist/
@@ -25,6 +24,7 @@ tmp/
 .nitro/
 .cache/
 flec_blog
+.wrangler/
 
 # 日志
 logs/

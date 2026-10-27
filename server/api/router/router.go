@@ -9,8 +9,7 @@ import (
 	"flec_blog/internal/service"
 	"flec_blog/pkg/database"
 	"flec_blog/pkg/email"
-	"flec_blog/pkg/feishu"
-	mcpserver "flec_blog/pkg/mcp"
+	"flec_blog/pkg/mcp"
 	"flec_blog/pkg/notification"
 	"flec_blog/pkg/scheduler"
 	"flec_blog/pkg/upload"
@@ -72,8 +71,7 @@ func InitRouter(db *database.Database, conf *config.Config) *gin.Engine {
 
 	// 初始化服务
 	emailClient := email.Initialize(conf)
-	feishuClient := feishu.Initialize(conf)
-	notificationSvc := notification.NewService(emailClient, feishuClient, conf)
+	notificationSvc := notification.NewService(emailClient, conf)
 	userService := service.NewUserService(userRepo, fileService, conf)
 	verificationService := service.NewVerificationService(verificationRepo, userRepo, emailClient, conf)
 	articleService := service.NewArticleService(articleRepo, tagRepo, categoryRepo, commentRepo, fileService, db.DB)
@@ -88,8 +86,7 @@ func InitRouter(db *database.Database, conf *config.Config) *gin.Engine {
 	feedbackService := service.NewFeedbackService(feedbackRepo, notificationService, fileService)
 	subscriberService := service.NewSubscriberService(subscriberRepo, emailClient, conf)
 	rssFeedService := service.NewRssFeedService(rssFeedRepo, notificationService)
-	systemService := service.NewSystemService(db.DB, uploadManager, emailClient, feishuClient, notificationService)
-	feishu.InitCardHandlers(friendService, commentService, userService, statsService, systemService, rssFeedService)
+	systemService := service.NewSystemService(db.DB, uploadManager, emailClient, notificationService)
 	settingService := service.NewSettingService(db.DB)
 	settingService.SetConfig(conf)                         // 设置全局配置对象，用于热重载
 	settingService.SetFileService(fileService)             // 设置文件服务，用于文件状态管理
@@ -123,10 +120,7 @@ func InitRouter(db *database.Database, conf *config.Config) *gin.Engine {
 	rssFeedController := v1.NewRssFeedController(rssFeedService)
 
 	// MCP 接口
-	mcpHandler := gin.WrapH(mcpserver.NewPublicHandler(
-		articleService, categoryService, tagService, commentService, friendService, rssFeedService, momentService,
-		userService, statsService,
-	))
+	mcpHandler := gin.WrapH(mcp.NewHandler(articleService))
 	r.Any("/mcp", middleware.MCPAuth(settingService.MCPSecret), mcpHandler)
 
 	// Atom 订阅
@@ -304,7 +298,6 @@ func InitRouter(db *database.Database, conf *config.Config) *gin.Engine {
 		userManagement := adminAPI.Group("/users")
 		{
 			userManagement.GET("", userController.List)          // 获取用户列表
-			userManagement.GET("/:id", userController.Get)       // 获取用户详情
 			userManagement.POST("", userController.Create)       // 创建用户
 			userManagement.PUT("/:id", userController.Update)    // 更新用户信息
 			userManagement.DELETE("/:id", userController.Delete) // 删除用户
@@ -322,9 +315,6 @@ func InitRouter(db *database.Database, conf *config.Config) *gin.Engine {
 			// 数据导入
 			articleManagement.POST("/import", articleController.ImportArticles) // 导入文章数据（Hexo等）
 
-			// 微信公众号格式生成
-			articleManagement.POST("/:id/wechat/export", articleController.ExportToWeChat) // 生成微信公众号 HTML
-
 			// 文章下载
 			articleManagement.GET("/:id/download/zip", articleController.DownloadZip) // 下载为 Markdown
 		}
@@ -333,7 +323,6 @@ func InitRouter(db *database.Database, conf *config.Config) *gin.Engine {
 		tagManagement := adminAPI.Group("/tags")
 		{
 			tagManagement.GET("", tagController.List)          // 获取标签列表
-			tagManagement.GET("/:id", tagController.Get)       // 获取标签详情
 			tagManagement.POST("", tagController.Create)       // 创建标签
 			tagManagement.PUT("/:id", tagController.Update)    // 更新标签
 			tagManagement.DELETE("/:id", tagController.Delete) // 删除标签
@@ -343,7 +332,6 @@ func InitRouter(db *database.Database, conf *config.Config) *gin.Engine {
 		categoryManagement := adminAPI.Group("/categories")
 		{
 			categoryManagement.GET("", categoryController.List)          // 获取分类列表
-			categoryManagement.GET("/:id", categoryController.Get)       // 获取分类详情
 			categoryManagement.POST("", categoryController.Create)       // 创建分类
 			categoryManagement.PUT("/:id", categoryController.Update)    // 更新分类
 			categoryManagement.DELETE("/:id", categoryController.Delete) // 删除分类
@@ -354,14 +342,12 @@ func InitRouter(db *database.Database, conf *config.Config) *gin.Engine {
 		{
 			// 友链类型管理
 			friendManagement.GET("/types", friendController.ListTypes)         // 获取类型列表
-			friendManagement.GET("/types/:id", friendController.GetType)       // 获取类型详情
 			friendManagement.POST("/types", friendController.CreateType)       // 创建类型
 			friendManagement.PUT("/types/:id", friendController.UpdateType)    // 更新类型
 			friendManagement.DELETE("/types/:id", friendController.DeleteType) // 删除类型
 
 			// 友链管理
 			friendManagement.GET("", friendController.List)          // 获取友链列表
-			friendManagement.GET("/:id", friendController.Get)       // 获取友链详情
 			friendManagement.POST("", friendController.Create)       // 创建友链
 			friendManagement.PUT("/:id", friendController.Update)    // 更新友链
 			friendManagement.DELETE("/:id", friendController.Delete) // 删除友链
@@ -371,7 +357,6 @@ func InitRouter(db *database.Database, conf *config.Config) *gin.Engine {
 		momentManagement := adminAPI.Group("/moments")
 		{
 			momentManagement.GET("", momentController.List)          // 获取动态列表
-			momentManagement.GET("/:id", momentController.Get)       // 获取动态详情
 			momentManagement.POST("", momentController.Create)       // 创建动态
 			momentManagement.PUT("/:id", momentController.Update)    // 更新动态
 			momentManagement.DELETE("/:id", momentController.Delete) // 删除动态
@@ -382,7 +367,6 @@ func InitRouter(db *database.Database, conf *config.Config) *gin.Engine {
 		{
 			commentManagement.POST("", commentController.CreateForAdmin)                // 创建评论（管理员回复）
 			commentManagement.GET("", commentController.List)                           // 获取评论列表
-			commentManagement.GET("/:id", commentController.Get)                        // 获取评论详情
 			commentManagement.PUT("/:id/toggle-status", commentController.ToggleStatus) // 切换评论状态
 			commentManagement.PUT("/:id/toggle-pinned", commentController.TogglePinned) // 切换评论置顶
 			commentManagement.DELETE("/:id", commentController.Delete)                  // 删除评论（管理员硬删除）
@@ -396,7 +380,6 @@ func InitRouter(db *database.Database, conf *config.Config) *gin.Engine {
 		{
 			fileManagement.POST("", fileController.Upload)       // 上传文件
 			fileManagement.GET("", fileController.List)          // 获取文件列表
-			fileManagement.GET("/:id", fileController.Get)       // 获取文件详情
 			fileManagement.DELETE("/:id", fileController.Delete) // 删除文件
 		}
 
